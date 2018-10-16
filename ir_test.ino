@@ -1,3 +1,9 @@
+
+
+
+
+
+
 /* This example uses the accelerometer in the Zumo Shield's onboard LSM303DLHC with the LSM303 Library to
  * detect contact with an adversary robot in the sumo ring.
  *
@@ -35,10 +41,12 @@
  */
 
 #include <Wire.h>
+#include <Servo.h>
 #include <ZumoShield.h>
 
 // #define LOG_SERIAL // write log output to serial port
 
+#define sensor A0
 #define LED 13
 Pushbutton button(ZUMO_BUTTON); // pushbutton on pin 12
 
@@ -47,7 +55,7 @@ Pushbutton button(ZUMO_BUTTON); // pushbutton on pin 12
 #define XY_ACCELERATION_THRESHOLD 2400  // for detection of contact (~16000 = magnitude of acceleration due to gravity)
 
 // Reflectance Sensor Settings
-#define NUM_SENSORS 6
+#define NUM_SENSORS 4
 unsigned int sensor_values[NUM_SENSORS];
 // this might need to be tuned for different lighting conditions, surfaces, etc.
 #define QTR_THRESHOLD  1500 // microseconds
@@ -55,6 +63,7 @@ ZumoReflectanceSensorArray sensors(QTR_NO_EMITTER_PIN);
 
 // Motor Settings
 ZumoMotors motors;
+int pos = 0;
 
 // these might need to be tuned for different motor types
 #define REVERSE_SPEED     200 // 0 is stopped, 400 is full speed
@@ -69,6 +78,7 @@ ZumoMotors motors;
 #define RIGHT 1
 #define LEFT -1
 
+Servo myservo;
 enum ForwardSpeed { SearchSpeed, SustainedSpeed, FullSpeed };
 ForwardSpeed _forwardSpeed;  // current forward speed setting
 unsigned long full_speed_start_time;
@@ -85,6 +95,10 @@ unsigned long last_turn_time;
 unsigned long contact_made_time;
 #define MIN_DELAY_AFTER_TURN          400  // ms = min delay before detecting contact event
 #define MIN_DELAY_BETWEEN_CONTACTS   1000  // ms = min delay between detecting new contact event
+
+
+// IR sensor stuff
+#define SENSOR_RA_SIZE 3  // # samples to use for IR avg
 
 // RunningAverage class
 // based on RunningAverage library for Arduino
@@ -108,6 +122,7 @@ class RunningAverage
     T * _ar;
     static T zero;
 };
+
 
 // Accelerometer Class -- extends the LSM303 Library to support reading and averaging the x-y acceleration
 //   vectors from the onboard LSM303DLHC accelerometer/magnetometer
@@ -145,11 +160,17 @@ boolean in_contact;  // set when accelerometer detects contact with opposing rob
 // forward declaration
 void setForwardSpeed(ForwardSpeed speed);
 
+// TODO: Move this
+RunningAverage<int> sensor_avg(10);
+
 void setup()
 {
   // Initiate the Wire library and join the I2C bus as a master
   Wire.begin();
 
+  // Initiate line sensors
+  byte pins[] = {4, A2, A5, 5};
+  sensors.init(pins, 4);
   // Initiate LSM303
   lsm303.init();
   lsm303.enable();
@@ -168,6 +189,9 @@ void setup()
   pinMode(LED, HIGH);
   buzzer.playMode(PLAY_AUTOMATIC);
   waitForButtonAndCountDown(false);
+      Serial.begin(9600);
+    Serial.println("test");
+    myservo.attach(9);  // attaches the servo on pin 9 to the servo object
 }
 
 void waitForButtonAndCountDown(bool restarting)
@@ -201,39 +225,64 @@ void waitForButtonAndCountDown(bool restarting)
 
 void loop()
 {
-  if (button.isPressed())
-  {
-    // if button is pressed, stop and wait for another press to go again
-    motors.setSpeeds(0, 0);
-    button.waitForRelease();
-    waitForButtonAndCountDown(true);
+  for (pos = 0; pos <= 180; pos += 1) { // goes from 0 degrees to 180 degrees
+    float volts = analogRead(sensor) * (5.0/1024.0);
+    int distance = 13 * pow(volts, -1);
+    sensor_avg.addValue(distance);
+    if (distance <= 25 ) {
+      Serial.println(distance);
+    }
+    // in steps of 1 degree
+    myservo.write(pos);              // tell servo to go to position in variable 'pos'
+    delay(200);                       // waits 15ms for the servo to reach the position
   }
+  for (pos = 180; pos >= 0; pos -= 1) { // goes from 180 degrees to 0 degrees
+    float volts = analogRead(sensor) * (5.0/1024.0);
+    int distance = 13 * pow(volts, -1);
+    sensor_avg.addValue(distance);
+    if (distance <= 25) {
+      Serial.println(distance);
+    }
+    myservo.write(pos);              // tell servo to go to position in variable 'pos'
+    if (sensor_avg.getAverage() <= 27){
+      buzzer.playNote(NOTE_G(3), 50, 12);
+      Serial.println("FOUND SOMETHING");
+    }
+    delay(200);                       // waits 15ms for the servo to reach the position
+  }
+  // if (button.isPressed())
+  // {
+  //   // if button is pressed, stop and wait for another press to go again
+  //   motors.setSpeeds(0, 0);
+  //   button.waitForRelease();
+  //   waitForButtonAndCountDown(true);
+  // }
 
-  loop_start_time = millis();
-  lsm303.readAcceleration(loop_start_time);
-  sensors.read(sensor_values);
+  // loop_start_time = millis();
+  // lsm303.readAcceleration(loop_start_time);
+  // sensors.read(sensor_values);
 
-  if ((_forwardSpeed == FullSpeed) && (loop_start_time - full_speed_start_time > FULL_SPEED_DURATION_LIMIT))
-  {
-    setForwardSpeed(SustainedSpeed);
-  }
+  // if ((_forwardSpeed == FullSpeed) && (loop_start_time - full_speed_start_time > FULL_SPEED_DURATION_LIMIT))
+  // {
+  //   setForwardSpeed(SustainedSpeed);
+  // }
 
-  if (sensor_values[0] < QTR_THRESHOLD)
-  {
-    // if leftmost sensor detects line, reverse and turn to the right
-    turn(RIGHT, true);
-  }
-  else if (sensor_values[5] < QTR_THRESHOLD)
-  {
-    // if rightmost sensor detects line, reverse and turn to the left
-    turn(LEFT, true);
-  }
-  else  // otherwise, go straight
-  {
-    if (check_for_contact()) on_contact_made();
-    int speed = getForwardSpeed();
-    motors.setSpeeds(speed, speed);
-  }
+  // if (sensor_values[0] < QTR_THRESHOLD)
+  // {
+  //   // if leftmost sensor detects line, reverse and turn to the right
+  //   turn(RIGHT, true);
+  // }
+  // else if (sensor_values[5] < QTR_THRESHOLD)
+  // {
+  //   // if rightmost sensor detects line, reverse and turn to the left
+  //   turn(LEFT, true);
+  // }
+  // else  // otherwise, go straight
+  // {
+  //   if (check_for_contact()) on_contact_made();
+  //   int speed = getForwardSpeed();
+  //   motors.setSpeeds(speed, speed);
+  // }
 }
 
 // execute turn
