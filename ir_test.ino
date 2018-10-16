@@ -1,9 +1,5 @@
 
 
-
-
-
-
 /* This example uses the accelerometer in the Zumo Shield's onboard LSM303DLHC with the LSM303 Library to
  * detect contact with an adversary robot in the sumo ring.
  *
@@ -51,14 +47,14 @@
 Pushbutton button(ZUMO_BUTTON); // pushbutton on pin 12
 
 // Accelerometer Settings
-#define RA_SIZE 3  // number of readings to include in running average of accelerometer readings
-#define XY_ACCELERATION_THRESHOLD 2400  // for detection of contact (~16000 = magnitude of acceleration due to gravity)
+#define RA_SIZE 3                      // number of readings to include in running average of accelerometer readings
+#define XY_ACCELERATION_THRESHOLD 2400 // for detection of contact (~16000 = magnitude of acceleration due to gravity)
 
 // Reflectance Sensor Settings
 #define NUM_SENSORS 4
 unsigned int sensor_values[NUM_SENSORS];
 // this might need to be tuned for different lighting conditions, surfaces, etc.
-#define QTR_THRESHOLD  1500 // microseconds
+#define QTR_THRESHOLD 1500 // microseconds
 ZumoReflectanceSensorArray sensors(QTR_NO_EMITTER_PIN);
 
 // Motor Settings
@@ -66,39 +62,43 @@ ZumoMotors motors;
 int pos = 0;
 
 // these might need to be tuned for different motor types
-#define REVERSE_SPEED     200 // 0 is stopped, 400 is full speed
-#define TURN_SPEED        200
-#define SEARCH_SPEED      200
-#define SUSTAINED_SPEED   400 // switches to SUSTAINED_SPEED from FULL_SPEED after FULL_SPEED_DURATION_LIMIT ms
-#define FULL_SPEED        400
-#define STOP_DURATION     100 // ms
-#define REVERSE_DURATION  200 // ms
-#define TURN_DURATION     300 // ms
+#define REVERSE_SPEED 200 // 0 is stopped, 400 is full speed
+#define TURN_SPEED 200
+#define SEARCH_SPEED 200
+#define SUSTAINED_SPEED 400 // switches to SUSTAINED_SPEED from FULL_SPEED after FULL_SPEED_DURATION_LIMIT ms
+#define FULL_SPEED 400
+#define STOP_DURATION 100    // ms
+#define REVERSE_DURATION 200 // ms
+#define TURN_DURATION 300    // ms
 
 #define RIGHT 1
 #define LEFT -1
 
 Servo myservo;
-enum ForwardSpeed { SearchSpeed, SustainedSpeed, FullSpeed };
-ForwardSpeed _forwardSpeed;  // current forward speed setting
+enum ForwardSpeed
+{
+  SearchSpeed,
+  SustainedSpeed,
+  FullSpeed
+};
+ForwardSpeed _forwardSpeed; // current forward speed setting
 unsigned long full_speed_start_time;
-#define FULL_SPEED_DURATION_LIMIT     250  // ms
+#define FULL_SPEED_DURATION_LIMIT 250 // ms
 
 // Sound Effects
 ZumoBuzzer buzzer;
 const char sound_effect[] PROGMEM = "O4 T100 V15 L4 MS g12>c12>e12>G6>E12 ML>G2"; // "charge" melody
- // use V0 to suppress sound effect; v15 for max volume
+                                                                                  // use V0 to suppress sound effect; v15 for max volume
 
- // Timing
+// Timing
 unsigned long loop_start_time;
 unsigned long last_turn_time;
 unsigned long contact_made_time;
-#define MIN_DELAY_AFTER_TURN          400  // ms = min delay before detecting contact event
-#define MIN_DELAY_BETWEEN_CONTACTS   1000  // ms = min delay between detecting new contact event
-
+#define MIN_DELAY_AFTER_TURN 400        // ms = min delay before detecting contact event
+#define MIN_DELAY_BETWEEN_CONTACTS 1000 // ms = min delay between detecting new contact event
 
 // IR sensor stuff
-#define SENSOR_RA_SIZE 3  // # samples to use for IR avg
+#define SENSOR_RA_SIZE 3 // # samples to use for IR avg
 
 // RunningAverage class
 // based on RunningAverage library for Arduino
@@ -106,23 +106,23 @@ unsigned long contact_made_time;
 template <typename T>
 class RunningAverage
 {
-  public:
-    RunningAverage(void);
-    RunningAverage(int);
-    ~RunningAverage();
-    void clear();
-    void addValue(T);
-    T getAverage() const;
-    void fillValue(T, int);
-  protected:
-    int _size;
-    int _cnt;
-    int _idx;
-    T _sum;
-    T * _ar;
-    static T zero;
-};
+public:
+  RunningAverage(void);
+  RunningAverage(int);
+  ~RunningAverage();
+  void clear();
+  void addValue(T);
+  T getAverage() const;
+  void fillValue(T, int);
 
+protected:
+  int _size;
+  int _cnt;
+  int _idx;
+  T _sum;
+  T *_ar;
+  static T zero;
+};
 
 // Accelerometer Class -- extends the LSM303 Library to support reading and averaging the x-y acceleration
 //   vectors from the onboard LSM303DLHC accelerometer/magnetometer
@@ -136,26 +136,27 @@ class Accelerometer : public LSM303
     float dir;
   } acc_data_xy;
 
-  public:
-    Accelerometer() : ra_x(RA_SIZE), ra_y(RA_SIZE) {};
-    ~Accelerometer() {};
-    void enable(void);
-    void getLogHeader(void);
-    void readAcceleration(unsigned long timestamp);
-    float len_xy() const;
-    float dir_xy() const;
-    int x_avg(void) const;
-    int y_avg(void) const;
-    long ss_xy_avg(void) const;
-    float dir_xy_avg(void) const;
-  private:
-    acc_data_xy last;
-    RunningAverage<int> ra_x;
-    RunningAverage<int> ra_y;
+public:
+  Accelerometer() : ra_x(RA_SIZE), ra_y(RA_SIZE){};
+  ~Accelerometer(){};
+  void enable(void);
+  void getLogHeader(void);
+  void readAcceleration(unsigned long timestamp);
+  float len_xy() const;
+  float dir_xy() const;
+  int x_avg(void) const;
+  int y_avg(void) const;
+  long ss_xy_avg(void) const;
+  float dir_xy_avg(void) const;
+
+private:
+  acc_data_xy last;
+  RunningAverage<int> ra_x;
+  RunningAverage<int> ra_y;
 };
 
 Accelerometer lsm303;
-boolean in_contact;  // set when accelerometer detects contact with opposing robot
+boolean in_contact; // set when accelerometer detects contact with opposing robot
 
 // forward declaration
 void setForwardSpeed(ForwardSpeed speed);
@@ -180,7 +181,7 @@ void setup()
   lsm303.getLogHeader();
 #endif
 
-  randomSeed((unsigned int) millis());
+  randomSeed((unsigned int)millis());
 
   // uncomment if necessary to correct motor directions
   //motors.flipLeftMotor(true);
@@ -189,9 +190,9 @@ void setup()
   pinMode(LED, HIGH);
   buzzer.playMode(PLAY_AUTOMATIC);
   waitForButtonAndCountDown(false);
-      Serial.begin(9600);
-    Serial.println("test");
-    myservo.attach(9);  // attaches the servo on pin 9 to the servo object
+  Serial.begin(9600);
+  Serial.println("test");
+  myservo.attach(9); // attaches the servo on pin 9 to the servo object
 }
 
 void waitForButtonAndCountDown(bool restarting)
@@ -216,39 +217,44 @@ void waitForButtonAndCountDown(bool restarting)
   delay(1000);
 
   // reset loop variables
-  in_contact = false;  // 1 if contact made; 0 if no contact or contact lost
+  in_contact = false; // 1 if contact made; 0 if no contact or contact lost
   contact_made_time = 0;
-  last_turn_time = millis();  // prevents false contact detection on initial acceleration
+  last_turn_time = millis(); // prevents false contact detection on initial acceleration
   _forwardSpeed = SearchSpeed;
   full_speed_start_time = 0;
 }
 
 void loop()
 {
-  for (pos = 0; pos <= 180; pos += 1) { // goes from 0 degrees to 180 degrees
-    float volts = analogRead(sensor) * (5.0/1024.0);
+  for (pos = 0; pos <= 180; pos += 1)
+  { // goes from 0 degrees to 180 degrees
+    float volts = analogRead(sensor) * (5.0 / 1024.0);
     int distance = 13 * pow(volts, -1);
     sensor_avg.addValue(distance);
-    if (distance <= 25 ) {
+    if (distance <= 25)
+    {
       Serial.println(distance);
     }
     // in steps of 1 degree
-    myservo.write(pos);              // tell servo to go to position in variable 'pos'
-    delay(200);                       // waits 15ms for the servo to reach the position
+    myservo.write(pos); // tell servo to go to position in variable 'pos'
+    delay(200);         // waits 15ms for the servo to reach the position
   }
-  for (pos = 180; pos >= 0; pos -= 1) { // goes from 180 degrees to 0 degrees
-    float volts = analogRead(sensor) * (5.0/1024.0);
+  for (pos = 180; pos >= 0; pos -= 1)
+  { // goes from 180 degrees to 0 degrees
+    float volts = analogRead(sensor) * (5.0 / 1024.0);
     int distance = 13 * pow(volts, -1);
     sensor_avg.addValue(distance);
-    if (distance <= 25) {
+    if (distance <= 25)
+    {
       Serial.println(distance);
     }
-    myservo.write(pos);              // tell servo to go to position in variable 'pos'
-    if (sensor_avg.getAverage() <= 27){
+    myservo.write(pos); // tell servo to go to position in variable 'pos'
+    if (sensor_avg.getAverage() <= 27)
+    {
       buzzer.playNote(NOTE_G(3), 50, 12);
       Serial.println("FOUND SOMETHING");
     }
-    delay(200);                       // waits 15ms for the servo to reach the position
+    delay(200); // waits 15ms for the servo to reach the position
   }
   // if (button.isPressed())
   // {
@@ -314,7 +320,8 @@ void turn(char direction, bool randomize)
 void setForwardSpeed(ForwardSpeed speed)
 {
   _forwardSpeed = speed;
-  if (speed == FullSpeed) full_speed_start_time = loop_start_time;
+  if (speed == FullSpeed)
+    full_speed_start_time = loop_start_time;
 }
 
 int getForwardSpeed()
@@ -322,15 +329,15 @@ int getForwardSpeed()
   int speed;
   switch (_forwardSpeed)
   {
-    case FullSpeed:
-      speed = FULL_SPEED;
-      break;
-    case SustainedSpeed:
-      speed = SUSTAINED_SPEED;
-      break;
-    default:
-      speed = SEARCH_SPEED;
-      break;
+  case FullSpeed:
+    speed = FULL_SPEED;
+    break;
+  case SustainedSpeed:
+    speed = SUSTAINED_SPEED;
+    break;
+  default:
+    speed = SEARCH_SPEED;
+    break;
   }
   return speed;
 }
@@ -338,10 +345,10 @@ int getForwardSpeed()
 // check for contact, but ignore readings immediately after turning or losing contact
 bool check_for_contact()
 {
-  static long threshold_squared = (long) XY_ACCELERATION_THRESHOLD * (long) XY_ACCELERATION_THRESHOLD;
-  return (lsm303.ss_xy_avg() >  threshold_squared) && \
-    (loop_start_time - last_turn_time > MIN_DELAY_AFTER_TURN) && \
-    (loop_start_time - contact_made_time > MIN_DELAY_BETWEEN_CONTACTS);
+  static long threshold_squared = (long)XY_ACCELERATION_THRESHOLD * (long)XY_ACCELERATION_THRESHOLD;
+  return (lsm303.ss_xy_avg() > threshold_squared) &&
+         (loop_start_time - last_turn_time > MIN_DELAY_AFTER_TURN) &&
+         (loop_start_time - contact_made_time > MIN_DELAY_BETWEEN_CONTACTS);
 }
 
 // sound horn and accelerate on contact -- fight or flight
@@ -380,7 +387,7 @@ void Accelerometer::enable(void)
   writeAccReg(LSM303::CTRL_REG1_A, 0x27);
 
   if (getDeviceType() == LSM303::device_DLHC)
-  writeAccReg(LSM303::CTRL_REG4_A, 0x08); // DLHC: enable high resolution mode
+    writeAccReg(LSM303::CTRL_REG4_A, 0x08); // DLHC: enable high resolution mode
 }
 
 void Accelerometer::getLogHeader(void)
@@ -392,7 +399,8 @@ void Accelerometer::getLogHeader(void)
 void Accelerometer::readAcceleration(unsigned long timestamp)
 {
   readAcc();
-  if (a.x == last.x && a.y == last.y) return;
+  if (a.x == last.x && a.y == last.y)
+    return;
 
   last.timestamp = timestamp;
   last.x = a.x;
@@ -402,26 +410,26 @@ void Accelerometer::readAcceleration(unsigned long timestamp)
   ra_y.addValue(last.y);
 
 #ifdef LOG_SERIAL
- Serial.print(last.timestamp);
- Serial.print("  ");
- Serial.print(last.x);
- Serial.print("  ");
- Serial.print(last.y);
- Serial.print("  ");
- Serial.print(len_xy());
- Serial.print("  ");
- Serial.print(dir_xy());
- Serial.print("  |  ");
- Serial.print(sqrt(static_cast<float>(ss_xy_avg())));
- Serial.print("  ");
- Serial.print(dir_xy_avg());
- Serial.println();
+  Serial.print(last.timestamp);
+  Serial.print("  ");
+  Serial.print(last.x);
+  Serial.print("  ");
+  Serial.print(last.y);
+  Serial.print("  ");
+  Serial.print(len_xy());
+  Serial.print("  ");
+  Serial.print(dir_xy());
+  Serial.print("  |  ");
+  Serial.print(sqrt(static_cast<float>(ss_xy_avg())));
+  Serial.print("  ");
+  Serial.print(dir_xy_avg());
+  Serial.println();
 #endif
 }
 
 float Accelerometer::len_xy() const
 {
-  return sqrt(last.x*a.x + last.y*a.y);
+  return sqrt(last.x * a.x + last.y * a.y);
 }
 
 float Accelerometer::dir_xy() const
@@ -443,15 +451,13 @@ long Accelerometer::ss_xy_avg(void) const
 {
   long x_avg_long = static_cast<long>(x_avg());
   long y_avg_long = static_cast<long>(y_avg());
-  return x_avg_long*x_avg_long + y_avg_long*y_avg_long;
+  return x_avg_long * x_avg_long + y_avg_long * y_avg_long;
 }
 
 float Accelerometer::dir_xy_avg(void) const
 {
   return atan2(static_cast<float>(x_avg()), static_cast<float>(y_avg())) * 180.0 / M_PI;
 }
-
-
 
 // RunningAverage class
 // based on RunningAverage library for Arduino
@@ -466,7 +472,7 @@ template <typename T>
 RunningAverage<T>::RunningAverage(int n)
 {
   _size = n;
-  _ar = (T*) malloc(_size * sizeof(T));
+  _ar = (T *)malloc(_size * sizeof(T));
   clear();
 }
 
@@ -483,7 +489,8 @@ void RunningAverage<T>::clear()
   _cnt = 0;
   _idx = 0;
   _sum = zero;
-  for (int i = 0; i< _size; i++) _ar[i] = zero;  // needed to keep addValue simple
+  for (int i = 0; i < _size; i++)
+    _ar[i] = zero; // needed to keep addValue simple
 }
 
 // adds a new value to the data-set
@@ -494,15 +501,18 @@ void RunningAverage<T>::addValue(T f)
   _ar[_idx] = f;
   _sum += _ar[_idx];
   _idx++;
-  if (_idx == _size) _idx = 0;  // faster than %
-  if (_cnt < _size) _cnt++;
+  if (_idx == _size)
+    _idx = 0; // faster than %
+  if (_cnt < _size)
+    _cnt++;
 }
 
 // returns the average of the data-set added so far
 template <typename T>
 T RunningAverage<T>::getAverage() const
 {
-  if (_cnt == 0) return zero; // NaN ?  math.h
+  if (_cnt == 0)
+    return zero; // NaN ?  math.h
   return _sum / _cnt;
 }
 
