@@ -74,8 +74,6 @@ int pos = 0;
 #define RIGHT 1
 #define LEFT -1
 
-#define TURNWHENSEE 1
-
 Servo myservo;
 enum ForwardSpeed
 {
@@ -316,29 +314,30 @@ int processDistance(int distance, int pos)
 {
     sensor_avg.addValue(distance);
 
-    if (distance <= 25)
+    if (distance <= 50)
     {
         Serial.println(distance);
     }
 
     if (sensor_avg.getAverage() <= 25)
     {
+        Serial.println("Sensor average <= 25");
+        Serial.println("Pos: ");
+        Serial.print(pos);
         buzzer.playNote(NOTE_G(3), 50, 12);
-        // Serial.println("avg IR: " + sensor_avg.getAverage() + ". Servo position: " + pos);
-        if (TURNWHENSEE)
+        if (pos < 60)
         {
-            if (pos < 60)
-            {
-                turn(RIGHT, false, false);
-                //pos = 90;
-                // myservo.write(90);
-            }
-            if (pos > 150)
-            {
-                turn(LEFT, false, false);
-                //pos = 90;
-                // myservo.write(90);
-            }
+            Serial.println("turn RIGHT");
+            turn(RIGHT, false, false);
+            //pos = 90;
+            // myservo.write(90);
+        }
+        if (pos > 150)
+        {
+            Serial.println("turn LEFT");
+            turn(LEFT, false, false);
+            //pos = 90;
+            // myservo.write(90);
         }
     }
     return pos;
@@ -362,9 +361,14 @@ void turn(char direction, bool randomize, bool reverse)
         motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
         delay(REVERSE_DURATION);
     }
+    Serial.println("Setting speeds for turn");
+    Serial.println(TURN_SPEED * direction);
     motors.setSpeeds(TURN_SPEED * direction, -TURN_SPEED * direction);
+    Serial.println("Delay 1000");
     delay(1000);
+    Serial.println("Set speed to 0");
     motors.setSpeeds(0, 0);
+    Serial.println("Delay 3000");
     delay(3000);
     //int speed = getForwardSpeed();
     //motors.setSpeeds(speed, speed);
