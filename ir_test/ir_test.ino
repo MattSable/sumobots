@@ -1,5 +1,3 @@
-
-
 /* This example uses the accelerometer in the Zumo Shield's onboard LSM303DLHC with the LSM303 Library to
  * detect contact with an adversary robot in the sumo ring.
  *
@@ -51,7 +49,7 @@ Pushbutton button(ZUMO_BUTTON); // pushbutton on pin 12
 #define XY_ACCELERATION_THRESHOLD 2400 // for detection of contact (~16000 = magnitude of acceleration due to gravity)
 
 // Reflectance Sensor Settings
-#define NUM_SENSORS 4
+#define NUM_SENSORS 6
 unsigned int sensor_values[NUM_SENSORS];
 // this might need to be tuned for different lighting conditions, surfaces, etc.
 #define QTR_THRESHOLD 1500 // microseconds
@@ -63,7 +61,7 @@ int pos = 0;
 
 // these might need to be tuned for different motor types
 #define REVERSE_SPEED 200 // 0 is stopped, 400 is full speed
-#define TURN_SPEED 200
+#define TURN_SPEED 400
 #define SEARCH_SPEED 200
 #define SUSTAINED_SPEED 400 // switches to SUSTAINED_SPEED from FULL_SPEED after FULL_SPEED_DURATION_LIMIT ms
 #define FULL_SPEED 400
@@ -88,6 +86,7 @@ unsigned long full_speed_start_time;
 // Sound Effects
 ZumoBuzzer buzzer;
 const char sound_effect[] PROGMEM = "O4 T100 V15 L4 MS g12>c12>e12>G6>E12 ML>G2"; // "charge" melody
+const char ffSong[] PROGMEM = "O4 T140 V15 L4  b10 b10 b10 b4 g4 a4 b16 r8 a16 b2";
                                                                                   // use V0 to suppress sound effect; v15 for max volume
 
 // Timing
@@ -97,6 +96,7 @@ unsigned long contact_made_time;
 #define MIN_DELAY_AFTER_TURN 400        // ms = min delay before detecting contact event
 #define MIN_DELAY_BETWEEN_CONTACTS 1000 // ms = min delay between detecting new contact event
 
+#define LOG_SERIAL 1
 // IR sensor stuff
 #define SENSOR_RA_SIZE 3 // # samples to use for IR avg
 
@@ -157,29 +157,27 @@ class Accelerometer : public LSM303
 
 Accelerometer lsm303;
 boolean in_contact; // set when accelerometer detects contact with opposing robot
+boolean in_sight; // set when enemy is in sight
+int search_direction;
 
 // forward declaration
 void setForwardSpeed(ForwardSpeed speed);
 
-// TODO: Move this
-RunningAverage<int> sensor_avg(10);
+RunningAverage<int> sensor_avg(5);
 
 void setup()
 {
+    search_direction = LEFT;
     // Initiate the Wire library and join the I2C bus as a master
     Wire.begin();
 
-    // Initiate line sensors
-    byte pins[] = {4, A2, A5, 5};
-    sensors.init(pins, 4);
     // Initiate LSM303
     lsm303.init();
     lsm303.enable();
 
-#ifdef LOG_SERIAL
+
     Serial.begin(9600);
     lsm303.getLogHeader();
-#endif
 
     randomSeed((unsigned int)millis());
 
@@ -189,10 +187,8 @@ void setup()
 
     pinMode(LED, HIGH);
     buzzer.playMode(PLAY_AUTOMATIC);
+   
     waitForButtonAndCountDown(false);
-    Serial.begin(9600);
-    Serial.println("test");
-    myservo.attach(5); // attaches the servo on pin 9 to the servo object
 }
 
 void waitForButtonAndCountDown(bool restarting)
@@ -203,6 +199,7 @@ void waitForButtonAndCountDown(bool restarting)
 #endif
 
     Serial.println("IN SETUP");
+
     digitalWrite(LED, HIGH);
     button.waitForButton();
     digitalWrite(LED, LOW);
@@ -227,151 +224,126 @@ void waitForButtonAndCountDown(bool restarting)
 
 void loop()
 {
-
-    // for (pos = 0; pos <= 180; pos += 1)
-    // {
-    //   myservo.write(pos);
-    //   delay(200);
-    // }
-    // for (pos = 180; pos >= 0; pos -= 1)
-    // {
-    //   myservo.write(pos);
-    //   delay(200);
-    // }
-    // return;
-
-    // myservo.write(0); // tell servo to go to position in variable 'pos'
-    // delay(2000);
-    // myservo.write(90); // tell servo to go to position in variable 'pos'
-    // delay(2000);
-    // myservo.write(180); // tell servo to go to position in variable 'pos'
-    // delay(2000);
-    // return;
-
-    for (pos = 0; pos <= 180; pos += 1)
-    {
-        myservo.write(pos);
-
-        int distance = getDistance();
-        pos = processDistance(distance, pos);
-
-        delay(200);
-    }
-    for (pos = 180; pos >= 0; pos -= 1)
-    {
-        myservo.write(pos);
-
-        int distance = getDistance();
-        pos = processDistance(distance, pos);
-
-        delay(200);
-    }
-    // if (button.isPressed())
-    // {
-    //   // if button is pressed, stop and wait for another press to go again
-    //   motors.setSpeeds(0, 0);
-    //   button.waitForRelease();
-    //   waitForButtonAndCountDown(true);
-    // }
-
-    // loop_start_time = millis();
-    // lsm303.readAcceleration(loop_start_time);
-    // sensors.read(sensor_values);
-
-    // if ((_forwardSpeed == FullSpeed) && (loop_start_time - full_speed_start_time > FULL_SPEED_DURATION_LIMIT))
-    // {
-    //   setForwardSpeed(SustainedSpeed);
-    // }
-
-    // if (sensor_values[0] < QTR_THRESHOLD)
-    // {
-    //   // if leftmost sensor detects line, reverse and turn to the right
-    //   turn(RIGHT, true, true);
-    // }
-    // else if (sensor_values[5] < QTR_THRESHOLD)
-    // {
-    //   // if rightmost sensor detects line, reverse and turn to the left
-    //   turn(LEFT, true, true);
-    // }
-    // else  // otherwise, go straight
-    // {
-    //   if (check_for_contact()) on_contact_made();
-    //   int speed = getForwardSpeed();
-    //   motors.setSpeeds(speed, speed);
-    // }
+    Serial.println(getDistance());
+    defaultLoop();
 }
 
-int getDistance()
+void defaultLoop()
 {
-    // TODO: Use magic number instead of division
-    float volts = analogRead(sensor) * (5.0 / 1024.0);
-    int distance = 13 * pow(volts, -1);
+    if (button.isPressed())
+    {
+        // if button is pressed, stop and wait for another press to go again
+        motors.setSpeeds(0, 0);
+        button.waitForRelease();
+        waitForButtonAndCountDown(true);
+    }
 
-    return distance;
+    loop_start_time = millis();
+    lsm303.readAcceleration(loop_start_time);
+    sensors.read(sensor_values);
+
+    if ((_forwardSpeed == FullSpeed) && (loop_start_time - full_speed_start_time > FULL_SPEED_DURATION_LIMIT))
+    {
+        setForwardSpeed(SustainedSpeed);
+    }
+
+    int distance = getDistance();
+    if (distance > 3)
+    {
+        sensor_avg.addValue(distance);
+    }
+    if (sensor_avg.getAverage() < 25)
+    {
+        if(!in_sight) {
+             buzzer.playFromProgramSpace(ffSong);
+        }
+        in_sight = true;
+    }
+    else
+    {
+        in_sight = false;
+    }
+
+    if (sensor_values[0] < QTR_THRESHOLD)
+    {
+        // if leftmost sensor detects line, reverse and turn to the right
+        turn(RIGHT, true);
+        search_direction = RIGHT;
+    }
+    else if (sensor_values[5] < QTR_THRESHOLD)
+    {
+        // if rightmost sensor detects line, reverse and turn to the left
+        turn(LEFT, true);
+        search_direction = LEFT;
+    }
+    else // otherwise, go straight
+    {
+        if (check_for_contact()) 
+        {
+            on_contact_made();
+        }  
+        else if (in_sight)
+        {
+           
+            setForwardSpeed(FullSpeed);
+        }
+        
+        else if (millis() - last_turn_time > 200 && !in_contact) 
+        {
+            unsigned long curr_time = millis();
+            while (millis() < curr_time + 200) {
+                distance = getDistance();
+                if (distance > 3)
+                {
+                    sensor_avg.addValue(distance);
+                }
+                if (sensor_avg.getAverage() < 25)
+                {
+                    motors.setSpeeds(FullSpeed,FullSpeed);
+                    break;
+                }
+                customTurn(search_direction, 10);
+            }
+        }
+
+        int speed = getForwardSpeed();
+        motors.setSpeeds(speed, speed);
+    }
 }
 
-int processDistance(int distance, int pos)
+void customTurn(char direction, int timeForTurn)
 {
-    sensor_avg.addValue(distance);
+    // assume contact lost
+    on_contact_lost();
 
-    if (distance <= 50)
-    {
-        Serial.println(distance);
-    }
-
-    if (sensor_avg.getAverage() <= 25)
-    {
-        Serial.println("Sensor average <= 25");
-        Serial.println("Pos: ");
-        Serial.print(pos);
-        buzzer.playNote(NOTE_G(3), 50, 12);
-        if (pos < 60)
-        {
-            Serial.println("turn RIGHT");
-            turn(RIGHT, false, false);
-            //pos = 90;
-            // myservo.write(90);
-        }
-        if (pos > 150)
-        {
-            Serial.println("turn LEFT");
-            turn(LEFT, false, false);
-            //pos = 90;
-            // myservo.write(90);
-        }
-    }
-    return pos;
+    motors.setSpeeds(TURN_SPEED * direction, -TURN_SPEED * direction);
+    delay(timeForTurn);
+    last_turn_time = millis();
 }
+
 // execute turn
 // direction:  RIGHT or LEFT
 // randomize: to improve searching
-void turn(char direction, bool randomize, bool reverse)
+void turn(char direction, bool randomize)
 {
+#ifdef LOG_SERIAL
+    Serial.print("turning ...");
+    Serial.println();
+#endif
+
     // assume contact lost
-    // TODO: May not want to assume this anymore
-    // on_contact_lost();
+    on_contact_lost();
 
     static unsigned int duration_increment = TURN_DURATION / 4;
 
     // motors.setSpeeds(0,0);
     // delay(STOP_DURATION);
-
-    if (reverse)
-    {
-        motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
-        delay(REVERSE_DURATION);
-    }
-    Serial.println("Setting speeds for turn");
-    Serial.println(TURN_SPEED * direction);
+    motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
+    delay(REVERSE_DURATION);
     motors.setSpeeds(TURN_SPEED * direction, -TURN_SPEED * direction);
-    Serial.println("Delay 1000");
-    delay(1000);
-    Serial.println("Set speed to 0");
-    motors.setSpeeds(0, 0);
-    Serial.println("Delay 3000");
-    delay(3000);
-    //int speed = getForwardSpeed();
-    //motors.setSpeeds(speed, speed);
+    delay(randomize ? TURN_DURATION + (random(8) - 2) * duration_increment : TURN_DURATION);
+    int speed = getForwardSpeed();
+    motors.setSpeeds(speed, speed);
     last_turn_time = millis();
 }
 
@@ -419,7 +391,6 @@ void on_contact_made()
     in_contact = true;
     contact_made_time = loop_start_time;
     setForwardSpeed(FullSpeed);
-    buzzer.playFromProgramSpace(sound_effect);
 }
 
 // reset forward speed
@@ -585,4 +556,13 @@ void RunningAverage<T>::fillValue(T value, int number)
     {
         addValue(value);
     }
+}
+
+int getDistance()
+{
+    // TODO: Use magic number instead of division
+    float volts = analogRead(sensor) * (5.0 / 1024.0);
+    int distance = 13 * pow(volts, -1);
+
+    return distance;
 }
