@@ -74,6 +74,8 @@ int pos = 0;
 #define RIGHT 1
 #define LEFT -1
 
+#define TURNWHENSEE 1
+
 Servo myservo;
 enum ForwardSpeed
 {
@@ -192,7 +194,7 @@ void setup()
   waitForButtonAndCountDown(false);
   Serial.begin(9600);
   Serial.println("test");
-  myservo.attach(9); // attaches the servo on pin 9 to the servo object
+  myservo.attach(5); // attaches the servo on pin 9 to the servo object
 }
 
 void waitForButtonAndCountDown(bool restarting)
@@ -202,6 +204,7 @@ void waitForButtonAndCountDown(bool restarting)
   Serial.println();
 #endif
 
+  Serial.println("IN SETUP");
   digitalWrite(LED, HIGH);
   button.waitForButton();
   digitalWrite(LED, LOW);
@@ -226,35 +229,46 @@ void waitForButtonAndCountDown(bool restarting)
 
 void loop()
 {
+
+// for (pos = 0; pos <= 180; pos += 1)
+// {
+//   myservo.write(pos); 
+//   delay(200);
+// }
+// for (pos = 180; pos >= 0; pos -= 1)
+// {
+//   myservo.write(pos); 
+//   delay(200);
+// }
+// return;
+
+
+  // myservo.write(0); // tell servo to go to position in variable 'pos'
+  // delay(2000);
+  // myservo.write(90); // tell servo to go to position in variable 'pos'
+  // delay(2000);
+  // myservo.write(180); // tell servo to go to position in variable 'pos'
+  // delay(2000);
+  // return;
+  
+
   for (pos = 0; pos <= 180; pos += 1)
-  { // goes from 0 degrees to 180 degrees
-    float volts = analogRead(sensor) * (5.0 / 1024.0);
-    int distance = 13 * pow(volts, -1);
-    sensor_avg.addValue(distance);
-    if (distance <= 25)
-    {
-      Serial.println(distance);
-    }
-    // in steps of 1 degree
-    myservo.write(pos); // tell servo to go to position in variable 'pos'
-    delay(200);         // waits 15ms for the servo to reach the position
+  {
+    myservo.write(pos);
+
+    int distance = getDistance();
+    pos = processDistance(distance, pos);
+    
+    delay(200);
   }
   for (pos = 180; pos >= 0; pos -= 1)
-  { // goes from 180 degrees to 0 degrees
-    float volts = analogRead(sensor) * (5.0 / 1024.0);
-    int distance = 13 * pow(volts, -1);
-    sensor_avg.addValue(distance);
-    if (distance <= 25)
-    {
-      Serial.println(distance);
-    }
-    myservo.write(pos); // tell servo to go to position in variable 'pos'
-    if (sensor_avg.getAverage() <= 27)
-    {
-      buzzer.playNote(NOTE_G(3), 50, 12);
-      Serial.println("FOUND SOMETHING");
-    }
-    delay(200); // waits 15ms for the servo to reach the position
+  { 
+    myservo.write(pos);
+
+    int distance = getDistance();    
+    pos = processDistance(distance, pos);
+
+    delay(200);
   }
   // if (button.isPressed())
   // {
@@ -276,12 +290,12 @@ void loop()
   // if (sensor_values[0] < QTR_THRESHOLD)
   // {
   //   // if leftmost sensor detects line, reverse and turn to the right
-  //   turn(RIGHT, true);
+  //   turn(RIGHT, true, true);
   // }
   // else if (sensor_values[5] < QTR_THRESHOLD)
   // {
   //   // if rightmost sensor detects line, reverse and turn to the left
-  //   turn(LEFT, true);
+  //   turn(LEFT, true, true);
   // }
   // else  // otherwise, go straight
   // {
@@ -291,10 +305,48 @@ void loop()
   // }
 }
 
+int getDistance()
+{
+  // TODO: Use magic number instead of division
+  float volts = analogRead(sensor) * (5.0 / 1024.0);
+  int distance = 13 * pow(volts, -1);
+
+  return distance;
+}
+
+int processDistance(int distance, int pos)
+{
+  sensor_avg.addValue(distance);
+
+  if (distance <= 25)
+    {
+      Serial.println(distance);
+    }
+
+  if (sensor_avg.getAverage() <= 25)
+  {
+    buzzer.playNote(NOTE_G(3), 50, 12);
+    // Serial.println("avg IR: " + sensor_avg.getAverage() + ". Servo position: " + pos);
+    if (TURNWHENSEE)
+    {
+      if (pos < 60){
+        turn(RIGHT, false, false);
+        //pos = 90;
+        // myservo.write(90);
+      }
+      if (pos > 150){
+        turn(LEFT, false, false);
+        //pos = 90;
+        // myservo.write(90);
+      }
+    }
+  }
+return pos;
+}
 // execute turn
 // direction:  RIGHT or LEFT
 // randomize: to improve searching
-void turn(char direction, bool randomize)
+void turn(char direction, bool randomize, bool reverse)
 {
 #ifdef LOG_SERIAL
   Serial.print("turning ...");
@@ -302,18 +354,25 @@ void turn(char direction, bool randomize)
 #endif
 
   // assume contact lost
-  on_contact_lost();
+  // TODO: May not want to assume this anymore
+  // on_contact_lost();
 
   static unsigned int duration_increment = TURN_DURATION / 4;
 
   // motors.setSpeeds(0,0);
   // delay(STOP_DURATION);
-  motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
-  delay(REVERSE_DURATION);
+
+  if (reverse)
+  {
+    motors.setSpeeds(-REVERSE_SPEED, -REVERSE_SPEED);
+    delay(REVERSE_DURATION);
+  }
   motors.setSpeeds(TURN_SPEED * direction, -TURN_SPEED * direction);
-  delay(randomize ? TURN_DURATION + (random(8) - 2) * duration_increment : TURN_DURATION);
-  int speed = getForwardSpeed();
-  motors.setSpeeds(speed, speed);
+  delay(1000);
+  motors.setSpeeds(0,0);
+  delay(3000);
+  //int speed = getForwardSpeed();
+  //motors.setSpeeds(speed, speed);
   last_turn_time = millis();
 }
 
