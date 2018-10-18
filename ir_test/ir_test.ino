@@ -60,9 +60,9 @@ ZumoMotors motors;
 int pos = 0;
 
 // these might need to be tuned for different motor types
-#define REVERSE_SPEED 200 // 0 is stopped, 400 is full speed
-#define TURN_SPEED 400
-#define SEARCH_SPEED 200
+#define REVERSE_SPEED 300 // 0 is stopped, 400 is full speed
+#define TURN_SPEED 300
+#define SEARCH_SPEED 300
 #define SUSTAINED_SPEED 400 // switches to SUSTAINED_SPEED from FULL_SPEED after FULL_SPEED_DURATION_LIMIT ms
 #define FULL_SPEED 400
 #define STOP_DURATION 100    // ms
@@ -92,6 +92,7 @@ const char ffSong[] PROGMEM = "O4 T140 V15 L4  b10 b10 b10 b4 g4 a4 b16 r8 a16 b
 // Timing
 unsigned long loop_start_time;
 unsigned long last_turn_time;
+unsigned long custom_last_turn_time;
 unsigned long contact_made_time;
 #define MIN_DELAY_AFTER_TURN 400        // ms = min delay before detecting contact event
 #define MIN_DELAY_BETWEEN_CONTACTS 1000 // ms = min delay between detecting new contact event
@@ -163,7 +164,7 @@ int search_direction;
 // forward declaration
 void setForwardSpeed(ForwardSpeed speed);
 
-RunningAverage<int> sensor_avg(5);
+RunningAverage<int> sensor_avg(3);
 
 void setup()
 {
@@ -261,19 +262,20 @@ void defaultLoop()
     }
     else
     {
+        setForwardSpeed(SearchSpeed);
         in_sight = false;
     }
 
     if (sensor_values[0] < QTR_THRESHOLD)
     {
         // if leftmost sensor detects line, reverse and turn to the right
-        turn(RIGHT, true);
+        turn(RIGHT, false);
         search_direction = RIGHT;
     }
     else if (sensor_values[5] < QTR_THRESHOLD)
     {
         // if rightmost sensor detects line, reverse and turn to the left
-        turn(LEFT, true);
+        turn(LEFT, false);
         search_direction = LEFT;
     }
     else // otherwise, go straight
@@ -288,10 +290,10 @@ void defaultLoop()
             setForwardSpeed(FullSpeed);
         }
         
-        else if (millis() - last_turn_time > 200 && !in_contact) 
+        else if (millis() - custom_last_turn_time > 800 && !in_contact && millis() - last_turn_time > 300 ) 
         {
             unsigned long curr_time = millis();
-            while (millis() < curr_time + 200) {
+            while (millis() < curr_time + 1500) {
                 distance = getDistance();
                 if (distance > 3)
                 {
@@ -299,7 +301,7 @@ void defaultLoop()
                 }
                 if (sensor_avg.getAverage() < 25)
                 {
-                    motors.setSpeeds(FullSpeed,FullSpeed);
+                    setForwardSpeed(SearchSpeed);
                     break;
                 }
                 customTurn(search_direction, 10);
@@ -318,7 +320,7 @@ void customTurn(char direction, int timeForTurn)
 
     motors.setSpeeds(TURN_SPEED * direction, -TURN_SPEED * direction);
     delay(timeForTurn);
-    last_turn_time = millis();
+    custom_last_turn_time = millis();
 }
 
 // execute turn
@@ -378,6 +380,7 @@ bool check_for_contact()
     static long threshold_squared = (long)XY_ACCELERATION_THRESHOLD * (long)XY_ACCELERATION_THRESHOLD;
     return (lsm303.ss_xy_avg() > threshold_squared) &&
            (loop_start_time - last_turn_time > MIN_DELAY_AFTER_TURN) &&
+           (loop_start_time - custom_last_turn_time > MIN_DELAY_AFTER_TURN) &&
            (loop_start_time - contact_made_time > MIN_DELAY_BETWEEN_CONTACTS);
 }
 
